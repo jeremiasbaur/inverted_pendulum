@@ -1,69 +1,84 @@
-//#include "DegreeCounter.h"
+// Libaries import
 #include "math.h"
 #include "PVA.hpp"
 #include <PID_v1.h>
 
-//DegreeCounter cart = DegreeCounter(13, 12);
-//DegreeCounter endFeet = DegreeCounter(14, 27);
-
+// Rotary encoders pinout
 #define cartA 27
 #define cartB 14
 #define endA 12
 #define endB 13
 
+// Interrupt stuff of esp32
+portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+
+// Motor driver pinout
+#define motor_backward 23
+#define motor_forward 22
+#define motor_pwm 21
+
+// Rotation and position value of rotary encoders, used in Interrupt function
 volatile int cart_counter = 0;
 volatile int end_counter = 0;
 
+// max left and max right on linear rail in value of position rotary encoder
 int range_negative = -8000;
 int range_positive = 8000;
 
+// Proportional experiment stuff 
 const int len_last_values = 2;
 int last_values[len_last_values];
 long long time_counter = 0;
 
+// PID integral experiment stuff
 const int sum_len =  100;
 const int deriv_len = 0;
 int Sums[sum_len];
 int sum_error = 0;
 
+// PVA setup
 volatile int* ptr_cart_counter = &cart_counter;
 PVA pva(&cart_counter);
 
-int corr = 0;
+// Use this to correct left/right leaning
+double corr = 0.7;
 
-// PID parameters
+double angle;
+double rail_position;
+double error_angle;
+double last_error_angle;
+double timer;
+double rail_velocity;
+double angle_velocity;
+
+const int array_length = 1000;
+double rail_positions[array_length];
+double angle_values[array_length];
+double timer_values[array_length];
+
+// parameters for Proportional
 double prop_k = -22.5;
 double prop_pos_k = -0.1;
 
-portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
-
-#define motor_backward 23
-#define motor_forward 22
-#define motor_pwm 21
-
 long long t_step = 0;
-//gains
-double propo = 1;
-double deriv = 1;
-double integ = 1;
 
-//used to filter noise
-//and make integral term not last too long
-double filter_deriv = 20;
-double filter_integ = 100;
-double avg_error [20];
-//double sum_error [100];
-//vector<double> avg_error (filter_deriv);
-//vector<double> sum_error (filter_integ);
-double curr_avg = 0;
-double curr_sum = 0;
+// PID parameters
+double output, desired_angle, desired_position = 0;
+double angle_kp = 0, angle_ki = 0, angle_kd = 0;
+double pos_kp = 0, pos_ki = 0, pos_kd = 0;
 
+// PID initialisation
+PID angle_controller(&angle, &output, &desired_angle, angle_kp, angle_ki, angle_kd, DIRECT);
+PID pos_controller(&rail_position, &desired_angle, &desired_position, pos_kp, pos_ki, pos_kd, DIRECT); 
+
+// interrupt function called by change of rotary encoder
+// cart encoder for angle
 void IRAM_ATTR handleInterruptCart(){
   //portENTER_CRITICAL_ISR(&mux);
   cart_counter += digitalRead(cartA) == digitalRead(cartB) ? -1 : 1;
   //portEXIT_CRITICAL_ISR(&mux);
 }
-
+// end rotary encoder for position
 void IRAM_ATTR handleInterruptEnd(){
   //portENTER_CRITICAL_ISR(&mux);
   end_counter += digitalRead(endA) == digitalRead(endB) ? -1 : 1;
@@ -105,8 +120,15 @@ void setup() {
 
  //pva = PVA(cart_counter);
 
- Serial.println("Setup complete");
+ angle_controller.SetMode(AUTOMATIC);
+ angle_controller.SetOutputLimits(-255,255); 
+ angle_controller.SetSampleTime(3);
+ pos_controller.SetMode(AUTOMATIC);
+ pos_controller.SetOutputLimits(-300,300); 
+ pos_controller.SetSampleTime(3);
+
  delay(1000);
+ Serial.println("Setup complete");
 }
 
 bool change = false;
@@ -120,7 +142,9 @@ void loop() {
   //Serial.print(" End encoder value: ");
   //Serial.println(end_counter);
 
-  //PID(cart_counter);
+  //pidTester();
+  
+  //PID(cart_counter); // Experimental pid with only p and i atm
 
   mapMover(cart_counter);
   
@@ -142,8 +166,92 @@ void loop() {
   Serial.print("\t pointer of pva: ");
   Serial.println(pva.position_pointer);*/
   //delay(10);
-
+  
   if (!digitalRead(0)){
+    Serial.println("New parameter input mode:");
+    Serial.println("angle_kp = ");
+    while (Serial.available() == 0){
+      delay(1);
+    }
+    angle_kp = (double) Serial.parseFloat();
+    Serial.println(angle_kp);
+    Serial.read();
+    Serial.flush();
+    delay(100);
+
+    /*Serial.println("angle_kd = ");
+    while (Serial.available() == 0){
+      delay(1);
+    }
+    angle_kd = (double) Serial.parseFloat();
+    Serial.println(angle_kd);
+    Serial.read();
+    Serial.flush();
+    delay(100);
+
+    Serial.println("angle_ki = ");
+    while (Serial.available() == 0){
+      delay(1);
+    }
+    angle_ki = (double) Serial.parseFloat();
+    Serial.println(angle_ki);
+    Serial.read();
+    Serial.flush();
+    delay(100);*/
+    
+    Serial.println("pos_kp = ");
+    while (Serial.available() == 0){
+      delay(1);
+    }
+    pos_kp = (double) Serial.parseFloat();
+    Serial.println(pos_kp, 5);
+    Serial.read();
+    Serial.flush();
+    delay(100);
+
+    /*Serial.println("pos_kd = ");
+    while (Serial.available() == 0){
+      delay(1);
+    }
+    pos_kd = (double) Serial.parseFloat();
+    Serial.println(pos_kd, 5);
+    Serial.read();
+    Serial.flush();
+    delay(100);
+    
+    Serial.println("pos_ki = ");
+    while (Serial.available() == 0){
+      delay(1);
+    }
+    pos_ki = (double) Serial.parseFloat();
+    Serial.println(pos_ki, 5);
+    Serial.read();
+    Serial.flush();
+    delay(100);*/
+    
+    Serial.println("corr = ");
+    while (Serial.available() == 0){
+      delay(1);
+    }
+    
+    corr = (double) Serial.parseFloat();
+    Serial.println(corr);
+    Serial.read();
+    Serial.flush();
+    delay(100);
+    
+    /*Serial.println("prop_pos_k = ");
+    while (Serial.available() == 0){
+      delay(1);
+    }
+    prop_pos_k = (double) Serial.parseFloat();
+    Serial.println(prop_pos_k);
+    Serial.read();
+    Serial.flush();
+    delay(1000);*/
+  }
+
+  /*if (!digitalRead(0)){
     Serial.println("New parameter input mode:");
     Serial.println("prop_k = ");
     while (Serial.available() == 0){
@@ -163,9 +271,9 @@ void loop() {
     Serial.println(prop_pos_k);
     Serial.read();
     Serial.flush();
-    delay(1000);
+    delay(1000);*/
   
-    Serial.println("corr = ");
+    /*Serial.println("corr = ");
     while (Serial.available() == 0){
       delay(1);
     }
@@ -173,8 +281,74 @@ void loop() {
     Serial.println(corr);
     Serial.read();
     Serial.flush();
-    delay(1000);
+    delay(1000);*/
+}
+
+void pidTester(){
+  //Serial.println("pidTester called");
+  for (int i = array_length; i > 1; i--){
+    //Pushing the linear postion values one step down in the array to make place at element [0] for the present linear position  
+    rail_positions[i-1] = rail_positions[i-2];
+    //Pushing the angle values one step down in the array to make place at element [0] for the present angle
+    angle_values[i-1] = angle_values[i-2];
+    //Pushing the timer values one step down in the array to make place at element [0] for the present time in milliseconds
+    timer_values[i-1] = timer_values[i-2];
   }
+  //Serial.println("Shifted last values in arrays");
+  
+  int holder = cart_counter % 1200;
+  holder += 1200;
+  angle = (double)((holder%1200) - 600);
+  rail_position = (double)end_counter;
+  
+  timer = millis();
+  timer_values[0] = timer;
+  angle_values[0] = angle;
+  rail_positions[0] = rail_position;
+
+  //Serial.println("updated values for pid controller");
+  
+  // Average over last 5 cycles
+  rail_velocity = (rail_positions[0] - rail_positions[array_length-1]) / (timer_values[0] - timer_values[array_length-1]);
+  angle_velocity = (angle_values[0] - angle_values[array_length-1]) / (timer_values[0] - timer_values[array_length-1]);
+
+  //Serial.println("Average calculator done");
+
+  if (motorRangeChecker(true) && (angle > -51 && angle < 51)){
+    // PID computation for pos
+    pos_controller.SetTunings(pos_kp, pos_ki, pos_kd);
+    pos_controller.Compute();
+    
+    desired_angle += corr;
+    // PID computation for angle
+    error_angle = desired_angle - angle;
+    
+    angle_controller.SetTunings(angle_kp, angle_ki, angle_kd);
+    angle_controller.Compute();
+
+    if (output > 0){
+      output = map(abs(output), 0, 255, 95, 255);
+      motorMover(output);
+    } else{
+      output = map(abs(output), 0, 255, 95, 255);
+      motorMover(-output);
+      output = -output;
+    }
+  }
+  Serial.print("Desired angle: ");
+  Serial.print(desired_angle);
+  Serial.print("\tError angle: ");
+  Serial.print(error_angle);
+  Serial.print("\tAngle: ");
+  Serial.print(angle);
+  Serial.print("\tAverage angle velocity: ");
+  Serial.print(angle_velocity);
+  Serial.print("\tAverage rail velocity: ");
+  Serial.print(rail_velocity);
+  Serial.print("\tMotor output: ");
+  Serial.println(output);
+  
+  //Serial.println("After PID controller and motor movement");
 }
 
 int niceAngle(int rotation_value){
@@ -205,7 +379,7 @@ void mapMover(int angle){
     current_end_counter = sqrt(end_counter);
   }
   
-  move_value = prop_k*angle + current_end_counter * prop_pos_k;
+  move_value = angle_kp*angle*abs(angle) + current_end_counter * pos_kp;
   
   if (motorRangeChecker(true) && (angle > -51 && angle < 51)){
     motorMover(map(move_value, -50, 50, -255, 255));
@@ -299,15 +473,15 @@ void motorMover(int speed_motor){
     digitalWrite(motor_backward, LOW);
     digitalWrite(motor_forward, HIGH);
     ledcWrite(0, speed_motor);
-    Serial.print("Forward with speed: ");
-    Serial.println(speed_motor);
+    //Serial.print("Forward with speed: ");
+    //Serial.println(speed_motor);
     
   } else { // Backward
     digitalWrite(motor_backward, HIGH);
     digitalWrite(motor_forward, LOW);
-    ledcWrite(0, -1*speed_motor + 19);
-    Serial.print("Backward with speed: ");
-    Serial.println(-1*speed_motor);
+    ledcWrite(0, -1*speed_motor); // +19
+    //Serial.print("Backward with speed: ");
+    //Serial.println(-1*speed_motor);
   }
 }
 
@@ -338,32 +512,41 @@ bool motorRangeChecker(bool center_after_break){
 }
 
 void pwmTester(){
-  for(int i = 8; i<25; i++){
-    digitalWrite(motor_backward, LOW);
-    digitalWrite(motor_forward, HIGH);
-    ledcWrite(0, i*10);
+  for(int i = 90; i<256; i++){
     
-    Serial.println("Forward");
-    Serial.println(i*10);
+    motorMover(i);
     
-    while(end_counter>-8000){
+    int last_value = end_counter;
+    delay(100);
+    
+    while(end_counter>-6000){
       Serial.print("Cart encoder value: ");
       Serial.print(cart_counter);
       Serial.print(" End encoder value: ");
       Serial.println(end_counter);
+      if (end_counter == last_value) {
+        break;
+      }
+      last_value = end_counter;
+      delay(100);
     }
-    //delay(1000);
     
-    digitalWrite(motor_backward, HIGH);
-    digitalWrite(motor_forward, LOW);
-    ledcWrite(0, i*10);
-    Serial.println("Backward");
-    //delay(1000);
-    while(end_counter<8000){
+    motorMover(-i);
+    
+    last_value = end_counter;
+    delay(100);
+    
+    while(end_counter<6000){
       Serial.print("Cart encoder value: ");
       Serial.print(cart_counter);
       Serial.print(" End encoder value: ");
       Serial.println(end_counter);
+      
+      if (end_counter == last_value) {
+        break;
+      }
+      last_value = end_counter;
+      delay(100);
     }
   }
 }
