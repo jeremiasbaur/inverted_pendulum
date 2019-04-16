@@ -50,6 +50,7 @@ double last_error_angle;
 double timer;
 double rail_velocity;
 double angle_velocity;
+double last_time = 0;
 
 const int array_length = 1000;
 double rail_positions[array_length];
@@ -142,11 +143,11 @@ void loop() {
   //Serial.print(" End encoder value: ");
   //Serial.println(end_counter);
 
-  //pidTester();
+  pidTester();
   
   //PID(cart_counter); // Experimental pid with only p and i atm
 
-  mapMover(cart_counter);
+  //mapMover(cart_counter);
   
   time_counter++;
   //pwmTester();
@@ -165,7 +166,6 @@ void loop() {
   Serial.print(&cart_counter);
   Serial.print("\t pointer of pva: ");
   Serial.println(pva.position_pointer);*/
-  //delay(10);
   
   if (!digitalRead(0)){
     Serial.println("New parameter input mode:");
@@ -179,7 +179,7 @@ void loop() {
     Serial.flush();
     delay(100);
 
-    /*Serial.println("angle_kd = ");
+    Serial.println("angle_kd = ");
     while (Serial.available() == 0){
       delay(1);
     }
@@ -197,7 +197,7 @@ void loop() {
     Serial.println(angle_ki);
     Serial.read();
     Serial.flush();
-    delay(100);*/
+    delay(100);
     
     Serial.println("pos_kp = ");
     while (Serial.available() == 0){
@@ -209,7 +209,7 @@ void loop() {
     Serial.flush();
     delay(100);
 
-    /*Serial.println("pos_kd = ");
+    Serial.println("pos_kd = ");
     while (Serial.available() == 0){
       delay(1);
     }
@@ -227,7 +227,7 @@ void loop() {
     Serial.println(pos_ki, 5);
     Serial.read();
     Serial.flush();
-    delay(100);*/
+    delay(100);
     
     Serial.println("corr = ");
     while (Serial.available() == 0){
@@ -239,49 +239,14 @@ void loop() {
     Serial.read();
     Serial.flush();
     delay(100);
-    
-    /*Serial.println("prop_pos_k = ");
-    while (Serial.available() == 0){
-      delay(1);
-    }
-    prop_pos_k = (double) Serial.parseFloat();
-    Serial.println(prop_pos_k);
-    Serial.read();
-    Serial.flush();
-    delay(1000);*/
   }
-
-  /*if (!digitalRead(0)){
-    Serial.println("New parameter input mode:");
-    Serial.println("prop_k = ");
-    while (Serial.available() == 0){
-      delay(1);
-    }
-    prop_k = (double) Serial.parseFloat();
-    Serial.println(prop_k);
-    Serial.read();
-    Serial.flush();
-    delay(1000);
-    
-    Serial.println("prop_pos_k = ");
-    while (Serial.available() == 0){
-      delay(1);
-    }
-    prop_pos_k = (double) Serial.parseFloat();
-    Serial.println(prop_pos_k);
-    Serial.read();
-    Serial.flush();
-    delay(1000);*/
   
-    /*Serial.println("corr = ");
-    while (Serial.available() == 0){
-      delay(1);
-    }
-    corr = (int) Serial.parseFloat();
-    Serial.println(corr);
-    Serial.read();
-    Serial.flush();
-    delay(1000);*/
+  if(millis() - last_time < 10){
+    delay(10 - (millis() - last_time));
+  }
+  Serial.print("Round done ");
+  Serial.println(millis());
+  last_time = millis();
 }
 
 void pidTester(){
