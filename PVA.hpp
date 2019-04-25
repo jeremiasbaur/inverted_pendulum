@@ -9,10 +9,15 @@ class PVA
     double current_accleration;
     void setVelocity();
     void setAccleration();
+    int *position_array;
+    int *time_array;
+    int array_length;
   public:
-    PVA(volatile int* position_pointer);
+    PVA(volatile int* position_pointer, int array_length);
     void newPosition();
     int getPosition();
     double getVelocity();
     double getAccleration();
+    double getAbsVelocity();
+    int getModPosition(int mod);
 };

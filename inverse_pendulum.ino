@@ -37,8 +37,11 @@ int Sums[sum_len];
 int sum_error = 0;
 
 // PVA setup
+int array_length_pva = 50;
 volatile int* ptr_cart_counter = &cart_counter;
-PVA pva(&cart_counter);
+PVA pva(&cart_counter, array_length_pva);
+
+bool swung_up = false;
 
 // Use this to correct left/right leaning
 double corr = 0.7;
@@ -138,36 +141,9 @@ bool break_it = true;
 bool forward = true;
 
 void loop() {
-  //Serial.print("Cart encoder value: ");
-  //Serial.print(cart_counter);
-  //Serial.print(" End encoder value: ");
-  //Serial.println(end_counter);
-
-  pidTester();
   
-  //PID(cart_counter); // Experimental pid with only p and i atm
-
-  //mapMover(cart_counter);
-  
-  time_counter++;
-  //pwmTester();
-  /*pva.newPosition();
-  Serial.print(cart_counter);
-  Serial.print("\tPosition: ");
-  Serial.print(pva.getPosition());
-  //Serial.print("\tTime now: ");
-  //Serial.print(pva.time_now);
-  Serial.print("\tVelocity: ");
-  Serial.print(pva.getVelocity(), 5);
-  Serial.print("\tAccleration: ");
-  Serial.println(pva.getAccleration(), 5);*/
-
-  /*Serial.print("& of cart counter: ");
-  Serial.print(&cart_counter);
-  Serial.print("\t pointer of pva: ");
-  Serial.println(pva.position_pointer);*/
-  
-  if (!digitalRead(0)){
+  if (!digitalRead(0) || angle_kp == 0){
+    motorMover(0);
     Serial.println("New parameter input mode:");
     Serial.println("angle_kp = ");
     while (Serial.available() == 0){
@@ -240,16 +216,38 @@ void loop() {
     Serial.flush();
     delay(100);
   }
+
+  if (!swung_up) swingUp();
+  
+  pidTester(true);
+  
+  //PID(cart_counter); // Experimental pid with only p and i atm
+
+  //mapMover(cart_counter);
+  
+  time_counter++;
+  //pwmTester();
+  pva.newPosition();
+  Serial.print("\tPosition: ");
+  Serial.print(pva.getPosition());
+  //Serial.print("\tTime now: ");
+  //Serial.print(pva.time_now);
+  Serial.print("\tVelocity: ");
+  Serial.print(pva.getVelocity(), 5);
+  Serial.print("\tAccleration: ");
+  Serial.println(pva.getAccleration(), 5);
+
   
   if(millis() - last_time < 10){
     delay(10 - (millis() - last_time));
   }
-  Serial.print("Round done ");
-  Serial.println(millis());
+
+  /*Serial.print("Round done ");
+  Serial.println(millis());*/
   last_time = millis();
 }
 
-void pidTester(){
+void pidTester(bool log_values){
   //Serial.println("pidTester called");
   for (int i = array_length; i > 1; i--){
     //Pushing the linear postion values one step down in the array to make place at element [0] for the present linear position  
@@ -299,20 +297,27 @@ void pidTester(){
       motorMover(-output);
       output = -output;
     }
+  } else {
+    swung_up = false;
+    motorRangeChecker(true);
+    
+    delay(1000);
   }
-  Serial.print("Desired angle: ");
-  Serial.print(desired_angle);
-  Serial.print("\tError angle: ");
-  Serial.print(error_angle);
-  Serial.print("\tAngle: ");
-  Serial.print(angle);
-  Serial.print("\tAverage angle velocity: ");
-  Serial.print(angle_velocity);
-  Serial.print("\tAverage rail velocity: ");
-  Serial.print(rail_velocity);
-  Serial.print("\tMotor output: ");
-  Serial.println(output);
-  
+
+  if (log_values) {
+    Serial.print("Desired angle: ");
+    Serial.print(desired_angle);
+    Serial.print("\tError angle: ");
+    Serial.print(error_angle);
+    Serial.print("\tAngle: ");
+    Serial.print(angle);
+    Serial.print("\tAverage angle velocity: ");
+    Serial.print(angle_velocity);
+    Serial.print("\tAverage rail velocity: ");
+    Serial.print(rail_velocity);
+    Serial.print("\tMotor output: ");
+    Serial.println(output);
+  }
   //Serial.println("After PID controller and motor movement");
 }
 
@@ -324,6 +329,56 @@ int niceAngle(int rotation_value){
   int ans;
   ans = ((rotation_value-600) * 1000) / 600;
   return ans;
+}
+
+void swingUp(){
+  if (swung_up) return;
+  motorMover(255);
+  delay(500);
+  motorMover(-255);
+  delay(500);
+  motorMover(20);
+
+  int angle = pva.getPosition() % 1200;
+  angle += 1200;
+  angle = ((angle%1200) - 600);
+
+  int last_position = pva.getPosition();
+  int dir = 1;
+  
+  while (!(angle > -41 && angle < 41)){
+    while (pva.getPosition() == 0 || last_position/pva.getPosition() > 0.00){
+      last_position = pva.getPosition();
+      pva.newPosition();
+      //Serial.println(1);
+    }
+    motorMover(0);
+    //Serial.println(2);
+    
+    while (pva.getAbsVelocity() > 0.01 && !(angle > -41 && angle < 41)){
+      pva.newPosition();
+      if (pva.getVelocity()/pva.getAbsVelocity() > 0) dir = 1;
+      else dir = -1;
+      
+      motorMover( -220*dir);
+      if (-100*(pva.getVelocity() / pva.getAbsVelocity()) > 0 && end_counter < range_negative+4000) {
+        motorMover(0);
+      } else if (-100*(pva.getVelocity() / pva.getAbsVelocity()) < 0 && end_counter-4000 > range_positive) {
+        motorMover(0);
+      }
+      angle = pva.getPosition() % 1200;
+      angle += 1200;
+      angle = ((angle%1200) - 600);
+    }
+    motorMover(0);
+    pva.newPosition();
+    angle = pva.getPosition() % 1200;
+    angle += 1200;
+    angle = ((angle%1200) - 600);
+    last_position = pva.getPosition();
+  }
+  
+  swung_up = true;
 }
 
 void mapMover(int angle){
@@ -438,15 +493,15 @@ void motorMover(int speed_motor){
     digitalWrite(motor_backward, LOW);
     digitalWrite(motor_forward, HIGH);
     ledcWrite(0, speed_motor);
-    //Serial.print("Forward with speed: ");
-    //Serial.println(speed_motor);
+    Serial.print("Forward with speed: ");
+    Serial.println(speed_motor);
     
   } else { // Backward
     digitalWrite(motor_backward, HIGH);
     digitalWrite(motor_forward, LOW);
     ledcWrite(0, -1*speed_motor); // +19
-    //Serial.print("Backward with speed: ");
-    //Serial.println(-1*speed_motor);
+    Serial.print("Backward with speed: ");
+    Serial.println(-1*speed_motor);
   }
 }
 
