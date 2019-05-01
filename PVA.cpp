@@ -73,3 +73,24 @@ void PVA::setAccleration(){
     this->current_accleration = (double)(getVelocity()- last_velocity) / (double)(time_array[array_length-2] - time_array[array_length-1]);
   }
 }
+
+bool PVA::noMovementWaiter(){
+	int counter = 0;
+	int last_value = NULL;
+	int still = false;
+	
+	while (!still){
+    while(last_value != *position_pointer){
+			last_value = *position_pointer;
+			delay(1);
+    }
+		while(last_value == *position_pointer && counter < 3000){
+			last_value = *position_pointer;
+			delay(1);
+			counter++;
+    }
+		if (counter >= 3000) still = true;
+		counter = 0;
+	}
+	return true;
+}

@@ -20,4 +20,5 @@ class PVA
     double getAccleration();
     double getAbsVelocity();
     int getModPosition(int mod);
+		bool noMovementWaiter();
 };
