@@ -54,7 +54,7 @@ double angle_velocity;
 double last_time = 0;
 int sampling_time = 10;
 
-const int array_length = 1000;
+const int array_length = 100;
 double rail_positions[array_length];
 double angle_values[array_length];
 double timer_values[array_length];
@@ -79,13 +79,18 @@ PID pos_controller(&rail_position, &desired_angle, &desired_position, pos_kp, po
 bool swing_up_activated = false;
 
 // Debug output on/off
-bool motor_mover_debug = true;
+bool motor_mover_debug = false;
 bool pid_debug = false;
 bool pva_angel_debug = false;
 bool round_done_debug = false;
 bool motor_range_debug = false;
-bool centering_debug = true;
+bool centering_debug = false;
 bool swing_up_debug = true;
+
+bool log_cvs_format = true;
+// log settings
+int log_time_length = 5000 // in milliseconds
+bool columns_called = false;
 
 // interrupt function called by change of rotary encoder
 // cart encoder for angle
@@ -251,6 +256,7 @@ void loop() {
     Serial.read();
     Serial.flush();
     delay(100);
+	columns_called = false;
   }
 
   if (!swung_up && swing_up_activated) swingUp();
@@ -337,7 +343,31 @@ bool pidTester(bool log_values) {
       motorMover(-output);
       output = -output;
     }
-
+	
+	if (!columns_called){
+		log_time_length += millis();
+		Serial.println("Desired angle\tError angle\tAngle\tPosition\tAverage angle velocity\tAverage rail velocity\tMotor output\tTime");
+		columns_called = true;
+	}
+	
+	if (log_cvs_format && millis() < log_time_length){
+		Serial.print(desired_angle);
+		Serial.print("\t");
+		Serial.print(error_angle);
+		Serial.print("\t");
+		Serial.print(angle);
+		Serial.print("\t");
+		Serial.print(end_counter);
+		Serial.print("\t");
+		Serial.print(angle_velocity);
+		Serial.print("\t");
+		Serial.print(rail_velocity);
+		Serial.print("\t");
+		Serial.print(output);
+		Serial.print("\t");
+		Serial.println(millis());
+	}
+	
     if (log_values) {
       Serial.print("Desired angle: ");
       Serial.print(desired_angle);
@@ -345,12 +375,16 @@ bool pidTester(bool log_values) {
       Serial.print(error_angle);
       Serial.print("\tAngle: ");
       Serial.print(angle);
+	  Serial.print("\tPosition: ");
+      Serial.print(end_counter);
       Serial.print("\tAverage angle velocity: ");
       Serial.print(angle_velocity);
       Serial.print("\tAverage rail velocity: ");
       Serial.print(rail_velocity);
       Serial.print("\tMotor output: ");
-      Serial.println(output);
+      Serial.print(output);
+	  Serial.print("\tTime: ");
+      Serial.println(millis());
     }
 
     return true;
