@@ -1,6 +1,7 @@
 // Libraries import
 #include "math.h"
 #include "PVA.hpp"
+//#include "PID.hpp"
 #include <PID_v1.h>
 
 // Rotary encoders pinout
@@ -54,7 +55,7 @@ double angle_velocity;
 double last_time = 0;
 int sampling_time = 10;
 
-const int array_length = 100;
+const int array_length = 10;
 double rail_positions[array_length];
 double angle_values[array_length];
 double timer_values[array_length];
@@ -66,7 +67,7 @@ double prop_pos_k = -0.1;
 long long t_step = 0;
 
 // PID parameters
-double output, desired_angle, desired_position = 0;
+double output, output_pos, desired_angle, desired_position = 0;
 double angle_kp = 0, angle_ki = 0, angle_kd = 0;
 double pos_kp = 0, pos_ki = 0, pos_kd = 0;
 // Use this to correct left/right leaning
@@ -75,6 +76,9 @@ double corr = 0.7;
 // PID initialization
 PID angle_controller(&angle, &output, &desired_angle, angle_kp, angle_ki, angle_kd, DIRECT);
 PID pos_controller(&rail_position, &desired_angle, &desired_position, pos_kp, pos_ki, pos_kd, DIRECT);
+
+//PID angle_controller(&angle, &output, &desired_angle, angle_kp, angle_ki, angle_kd, sampling_time, array_length);
+//PID pos_controller(&rail_position, &output_pos, &desired_position, pos_kp, pos_ki, pos_kd, sampling_time, array_length);
 
 bool swing_up_activated = false;
 
@@ -89,7 +93,7 @@ bool swing_up_debug = true;
 
 bool log_cvs_format = true;
 // log settings
-int log_time_length = 5000 // in milliseconds
+int log_time_length[] = {500000, 0}; // in milliseconds
 bool columns_called = false;
 
 // interrupt function called by change of rotary encoder
@@ -150,10 +154,10 @@ void setup() {
 
   angle_controller.SetMode(AUTOMATIC);
   angle_controller.SetOutputLimits(-255, 255);
-  angle_controller.SetSampleTime(3);
+  angle_controller.SetSampleTime(sampling_time);
   pos_controller.SetMode(AUTOMATIC);
   pos_controller.SetOutputLimits(-300, 300);
-  pos_controller.SetSampleTime(3);
+  pos_controller.SetSampleTime(sampling_time);
 
   delay(1000);
   Serial.println("Setup complete");
@@ -256,7 +260,9 @@ void loop() {
     Serial.read();
     Serial.flush();
     delay(100);
-	columns_called = false;
+    //angle_controller.clearSumError();
+    //pos_controller.clearSumError();
+    columns_called = false;
   }
 
   if (!swung_up && swing_up_activated) swingUp();
@@ -323,7 +329,7 @@ bool pidTester(bool log_values) {
   rail_velocity = (rail_positions[0] - rail_positions[array_length - 1]) / (timer_values[0] - timer_values[array_length - 1]);
   angle_velocity = (angle_values[0] - angle_values[array_length - 1]) / (timer_values[0] - timer_values[array_length - 1]);
 
-  if (motorRangeChecker(true) && (angle > -51 && angle < 51)) {
+  if (motorRangeChecker(true) && (angle > -46 && angle < 46)) {
     // PID computation for pos
     pos_controller.SetTunings(pos_kp, pos_ki, pos_kd);
     pos_controller.Compute();
@@ -334,7 +340,9 @@ bool pidTester(bool log_values) {
 
     angle_controller.SetTunings(angle_kp, angle_ki, angle_kd);
     angle_controller.Compute();
-
+    //angle_controller.setParameters(angle_kp, angle_kd, angle_ki);
+    //angle_controller.calculateOutput();
+    
     if (output > 0) {
       output = map(abs(output), 0, 255, 95, 255);
       motorMover(output);
@@ -345,12 +353,27 @@ bool pidTester(bool log_values) {
     }
 	
 	if (!columns_called){
-		log_time_length += millis();
+		log_time_length[1] = millis() + log_time_length[0];
 		Serial.println("Desired angle\tError angle\tAngle\tPosition\tAverage angle velocity\tAverage rail velocity\tMotor output\tTime");
 		columns_called = true;
-	}
+		Serial.print(angle_kp,10);
+		Serial.print("\t");
+    Serial.print(angle_kd,10);
+    Serial.print("\t");
+		Serial.print(angle_ki,10);
+    Serial.print("\t");
+		Serial.print(pos_kp,10);
+    Serial.print("\t");
+		Serial.print(pos_kd,10);
+    Serial.print("\t");
+		Serial.print(pos_ki,10);
+    Serial.print("\t");
+		Serial.print(corr);
+    Serial.print("\t");
+		Serial.println(speed_swing_up);
+  }
 	
-	if (log_cvs_format && millis() < log_time_length){
+	if (log_cvs_format && millis() < log_time_length[1]){
 		Serial.print(desired_angle);
 		Serial.print("\t");
 		Serial.print(error_angle);
@@ -359,13 +382,13 @@ bool pidTester(bool log_values) {
 		Serial.print("\t");
 		Serial.print(end_counter);
 		Serial.print("\t");
-		Serial.print(angle_velocity);
+		Serial.print(angle_velocity,10);
 		Serial.print("\t");
-		Serial.print(rail_velocity);
+		Serial.print(rail_velocity,10);
 		Serial.print("\t");
 		Serial.print(output);
 		Serial.print("\t");
-		Serial.println(millis());
+		Serial.println(log_time_length[0] - (log_time_length[1]-millis()));
 	}
 	
     if (log_values) {

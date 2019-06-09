@@ -1,18 +1,51 @@
-/*const int sum_len =  ;
-const int deriv_len = ;
-int Sums[sum_len];
-int sum_error = 0;
+#include "PID.hpp"
+#include "Arduino.h"
 
-void PID(int angle){
-	int prop_k = ;
-	int integ_k = ;
-	int deriv_k = ;
-	sum_error -= Sums[timer%sum_len];
-	Sums[timer%sum_len] = angle;
-	sum_error += angle;
-	int prop_term = (angle*255)/1000 * prop_k;
-	int integ_term = sum_error*255/1000 * integ_k;
-	int ans = prop_term + integ_term;
-	
+PID::PID(double* input, double* output, double* setpoint,
+         double Kp, double Kd, double Ki, double sampling_time, int array_length){
+  this->input = input;
+  this->output = output;
+  this->setpoint = setpoint;
+  this->sampling_time = sampling_time;
+  this->array_length = array_length;
+  last_time = millis();
+  last_error = 0;
+  PID::setParameters(Kp, Kd, Ki);
+  sum_error = new double[array_length];
+  for(int i = 0; i < array_length; i++){
+    sum_error[i] = 0;
+  }
+  curr_sum = 0;
 }
-	*/
+
+void PID::setParameters(double Kp, double Kd, double Ki){
+  this->Kp = Kp;
+  this->Kd = Kd;
+  this->Ki = Ki;
+}
+
+void PID::calculateOutput(){
+  current_time = millis();
+  double time_delta = (double)(current_time - last_time);
+
+  double error = *setpoint - *input;
+  
+  curr_sum -= sum_error[counter%array_length]/(double)array_length;
+  curr_sum += error/(double)array_length;
+  sum_error[counter%array_length] = error;
+  
+  *output = Kp * error;
+  *output += Kd * (error - last_error) / time_delta;
+  *output += Ki * curr_sum * time_delta; // time delta is always the same in this case
+  
+  last_error = error;
+  last_time = current_time;
+  counter++;
+}
+
+void PID::clearSumError(){
+  for(int i = 0; i < array_length; i++){
+    sum_error[i] = 0;
+  }
+  curr_sum = 0;
+}
